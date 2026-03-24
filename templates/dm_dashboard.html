@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Dungeon Master — The Compendium{% endblock %}
+{% block content %}
+<div class="dashboard-page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" id="dmTitle">The Dungeon Master's Eye</h1>
+      <p class="page-subtitle">All adventurers · Read only</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <span style="font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);background:rgba(201,150,63,0.1);border:1px solid rgba(201,150,63,0.3);padding:0.4rem 0.9rem;border-radius:4px">👁 DM View</span>
+    </div>
+  </div>
+
+  <div id="dmContent">
+    <div class="empty-state">Consulting the arcane records...</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const CLASS_ICONS = {
+  'Barbarian':'🪓','Bard':'🎵','Cleric':'⛪','Druid':'🌿','Fighter':'⚔️',
+  'Monk':'🥋','Paladin':'🛡️','Ranger':'🏹','Rogue':'🗡️','Sorcerer':'✨',
+  'Warlock':'👁️','Wizard':'📚','Artificer':'⚙️',
+};
+
+function charIcon(char) {
+  return CLASS_ICONS[char.class] || '⚔️';
+}
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadDMDashboard() {
+  const content = document.getElementById('dmContent');
+
+  try {
+    const me = await api('GET', '/api/me');
+    if (me.role !== 'dm') { window.location.href = '/dashboard'; return; }
+    if (me.must_change_password) { window.location.href = '/change-password'; return; }
+
+    document.getElementById('dmTitle').textContent = `${me.username}'s Domain`;
+
+    const chars = await api('GET', '/api/characters');
+    content.innerHTML = '';
+
+    if (chars.length === 0) {
+      content.innerHTML = '<div class="empty-state"><em>No adventurers have yet answered the call...</em></div>';
+      return;
+    }
+
+    // Group characters by player_name
+    const byPlayer = {};
+    chars.forEach(c => {
+      const p = c.player_name || 'Unknown Player';
+      if (!byPlayer[p]) byPlayer[p] = [];
+      byPlayer[p].push(c);
+    });
+
+    Object.entries(byPlayer).forEach(([playerName, playerChars]) => {
+      // Player heading
+      const heading = document.createElement('div');
+      heading.style.cssText = 'margin-bottom:1rem;margin-top:2rem;padding-bottom:0.5rem;border-bottom:1px solid rgba(201,150,63,0.2)';
+      heading.innerHTML = `
+        <span style="font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);opacity:0.8">
+          Player: ${escHtml(playerName)}
+          <span style="opacity:0.5;margin-left:0.5rem">(${playerChars.length} character${playerChars.length !== 1 ? 's' : ''})</span>
+        </span>`;
+      content.appendChild(heading);
+
+      // Characters grid for this player
+      const grid = document.createElement('div');
+      grid.className = 'characters-grid';
+      grid.style.marginBottom = '0.5rem';
+
+      playerChars.forEach(char => {
+        const hpPct = char.hp_max > 0 ? Math.round((char.hp_current / char.hp_max) * 100) : 0;
+        const hpColour = hpPct > 60 ? 'var(--emerald-bright)' : hpPct > 25 ? 'var(--gold)' : 'var(--crimson-bright)';
+
+        const card = document.createElement('div');
+        card.className = 'character-card';
+        card.style.cursor = 'pointer';
+        card.innerHTML = `
+          <div class="card-portrait">${charIcon(char)}</div>
+          <div class="card-name">${escHtml(char.name)}</div>
+          <div class="card-class">
+            ${char.race ? escHtml(char.race) + ' · ' : ''}
+            ${char.class ? escHtml(char.class) : 'Unknown Class'}
+            ${char.level ? ' · Lvl ' + char.level : ''}
+          </div>
+          <div class="card-stats">
+            <div class="card-stat">
+              <span class="stat-value" style="color:${hpColour}">${char.hp_current}/${char.hp_max}</span>
+              <span class="stat-label">HP</span>
+            </div>
+            <div class="card-stat">
+              <span class="stat-value">${char.level || 1}</span>
+              <span class="stat-label">Level</span>
+            </div>
+          </div>
+          <div class="hp-bar-container" style="margin-top:1rem">
+            <div class="hp-bar" style="width:${hpPct}%;background:linear-gradient(90deg,${hpColour},${hpColour})"></div>
+          </div>
+          <div style="margin-top:1.25rem">
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewChar('${char.id}')">
+              👁 View Sheet
+            </button>
+          </div>`;
+        card.addEventListener('click', () => viewChar(char.id));
+        grid.appendChild(card);
+      });
+
+      content.appendChild(grid);
+    });
+
+  } catch (e) {
+    if (e.message.includes('401') || e.message.includes('authenticated')) {
+      window.location.href = '/login';
+    } else {
+      content.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    }
+  }
+}
+
+function viewChar(id) {
+  window.location.href = `/character/${id}`;
+}
+
+document.addEventListener('DOMContentLoaded', loadDMDashboard);
+</script>
+{% endblock %}

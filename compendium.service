@@ -1,0 +1,15 @@
+[Unit]
+Description=The Compendium — D&D Campaign Manager
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/dnd_campaign
+ExecStart=/home/ubuntu/dnd_campaign/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+Environment=SECRET_KEY=CHANGE_THIS_TO_A_LONG_RANDOM_STRING
+
+[Install]
+WantedBy=multi-user.target

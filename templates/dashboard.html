@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}My Characters — The Compendium{% endblock %}
+{% block content %}
+<div class="dashboard-page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" id="dashTitle">The Adventuring Party</h1>
+      <p class="page-subtitle" id="dashSubtitle">Loading your roster...</p>
+    </div>
+    <a href="/character/new" class="btn btn-primary">+ New Character</a>
+  </div>
+
+  <div class="characters-grid" id="charactersGrid">
+    <div class="empty-state">Consulting the arcane records...</div>
+  </div>
+</div>
+
+<!-- Delete confirm handled inline -->
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const CLASS_ICONS = {
+  'Barbarian':'🪓','Bard':'🎵','Cleric':'⛪','Druid':'🌿','Fighter':'⚔️',
+  'Monk':'🥋','Paladin':'🛡️','Ranger':'🏹','Rogue':'🗡️','Sorcerer':'✨',
+  'Warlock':'👁️','Wizard':'📚','Artificer':'⚙️',
+};
+const RACE_ICONS = {
+  'Human':'🧑','Elf':'🧝','Dwarf':'🧔','Halfling':'🧒','Half-Orc':'💪',
+  'Tiefling':'😈','Dragonborn':'🐉','Gnome':'🔭','Half-Elf':'🌙',
+};
+
+function charIcon(char) {
+  return CLASS_ICONS[char.class] || RACE_ICONS[char.race] || '⚔️';
+}
+
+async function loadDashboard() {
+  const grid = document.getElementById('charactersGrid');
+  const sub  = document.getElementById('dashSubtitle');
+  try {
+    const me = await api('GET', '/api/me');
+    if (me.role === 'dm') { window.location.href = '/dm'; return; }
+    sub.textContent = `Welcome back, ${me.username}`;
+    const chars = await api('GET', '/api/characters');
+    grid.innerHTML = '';
+
+    // New character card first
+    const newCard = document.createElement('a');
+    newCard.href = '/character/new';
+    newCard.className = 'character-card new-character-card';
+    newCard.innerHTML = `
+      <div class="new-card-icon">✚</div>
+      <span class="new-card-text">Create New Character</span>`;
+    grid.appendChild(newCard);
+
+    if (chars.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.innerHTML = 'No adventurers yet. <em>The world awaits.</em>';
+      grid.appendChild(empty);
+      return;
+    }
+
+    chars.forEach(char => {
+      const card = document.createElement('div');
+      card.className = 'character-card';
+      const hpPct = char.hp_max > 0 ? Math.round((char.hp_current / char.hp_max) * 100) : 0;
+      card.innerHTML = `
+        <div class="card-portrait">${charIcon(char)}</div>
+        <div class="card-name">${escHtml(char.name)}</div>
+        <div class="card-class">
+          ${char.race ? escHtml(char.race) + ' · ' : ''}
+          ${char.class ? escHtml(char.class) : 'Unknown Class'}
+          ${char.level ? ' · Lvl ' + char.level : ''}
+        </div>
+        <div class="card-stats">
+          <div class="card-stat">
+            <span class="stat-value">${char.hp_current}/${char.hp_max}</span>
+            <span class="stat-label">HP</span>
+          </div>
+          <div class="card-stat">
+            <span class="stat-value">${char.level || 1}</span>
+            <span class="stat-label">Level</span>
+          </div>
+        </div>
+        <div class="hp-bar-container" style="margin-top:1rem">
+          <div class="hp-bar" style="width:${hpPct}%"></div>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:1.25rem">
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewChar('${char.id}')">View Sheet</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteChar('${char.id}','${escHtml(char.name)}')">Delete</button>
+        </div>`;
+      card.addEventListener('click', () => viewChar(char.id));
+      grid.appendChild(card);
+    });
+  } catch (e) {
+    if (e.message.includes('401') || e.message.includes('authenticated')) {
+      window.location.href = '/login';
+    } else {
+      grid.innerHTML = `<div class="empty-state">Failed to load characters: ${e.message}</div>`;
+    }
+  }
+}
+
+function viewChar(id) { window.location.href = `/character/${id}`; }
+
+function deleteChar(id, name) {
+  createModal({
+    title: 'Banish this Soul?',
+    content: `<p style="color:var(--parchment-dark);font-style:italic">Are you certain you wish to erase <strong style="color:var(--gold)">${name}</strong> from the records? This cannot be undone.</p>`,
+    confirmLabel: 'Yes, Banish',
+    confirmClass: 'btn-danger',
+    onConfirm: async () => {
+      try {
+        await api('DELETE', `/api/characters/${id}`);
+        showToast(`${name} has been struck from the records`);
+        loadDashboard();
+      } catch (e) {
+        showToast(e.message);
+      }
+    }
+  });
+}
+
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}

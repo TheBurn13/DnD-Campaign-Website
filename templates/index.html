@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}The Compendium — D&D Campaign Manager{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-crest">🐉</div>
+  <h1 class="hero-title">The Compendium</h1>
+  <p class="hero-subtitle-line">Your Campaign · Chronicled</p>
+  <div class="hero-divider">✦</div>
+  <p class="hero-description">
+    A sacred tome for adventurers. Create your characters, track your journey,
+    and forge your legend — all in one enchanted place.
+  </p>
+  <div class="hero-actions">
+    <a href="/register" class="btn btn-primary btn-lg">Begin Your Quest</a>
+    <a href="/login" class="btn btn-secondary btn-lg">Return, Adventurer</a>
+  </div>
+
+  <div class="hero-features">
+    <div class="feature-card">
+      <div class="feature-icon">📜</div>
+      <div class="feature-title">Character Sheets</div>
+      <p class="feature-desc">Full D&D 5e character sheets with stats, skills, spells &amp; inventory</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔐</div>
+      <div class="feature-title">Player Accounts</div>
+      <p class="feature-desc">Each player keeps their own account, their secrets safe from prying eyes</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚔️</div>
+      <div class="feature-title">Combat Ready</div>
+      <p class="feature-desc">HP tracking, armor class, initiative, spell slots — all at your fingertips</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🏰</div>
+      <div class="feature-title">Your Domain</div>
+      <p class="feature-desc">Runs on your own server — your campaign, your data, your fortress</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

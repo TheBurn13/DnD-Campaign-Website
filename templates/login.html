@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Enter the Realm — The Compendium{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-icon">🗝️</div>
+      <h1 class="auth-title">Enter the Realm</h1>
+      <p class="auth-subtitle">Speak your name, traveller</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input class="form-input" type="text" id="username" placeholder="Your adventurer's name" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" type="password" id="password" placeholder="Your secret word" autocomplete="current-password"/>
+    </div>
+
+    <button class="btn btn-primary" style="width:100%" id="loginBtn" onclick="doLogin()">
+      Enter ⚔
+    </button>
+
+    <div class="auth-footer">
+      No account yet? <a href="/register">Forge your legend</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function doLogin() {
+  const btn = document.getElementById('loginBtn');
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if (!username || !password) { showToast('Please fill in all fields'); return; }
+  btn.disabled = true;
+  btn.textContent = 'Entering...';
+  try {
+    const result = await api('POST', '/api/login', { username, password });
+    if (result.must_change_password) {
+      window.location.href = '/change-password';
+    } else if (result.role === 'dm') {
+      window.location.href = '/dm';
+    } else {
+      window.location.href = '/dashboard';
+    }
+  } catch (e) {
+    showToast(e.message);
+    btn.disabled = false;
+    btn.textContent = 'Enter ⚔';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+</script>
+{% endblock %}
