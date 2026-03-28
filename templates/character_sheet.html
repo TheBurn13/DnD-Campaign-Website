@@ -4,6 +4,107 @@
 <style>
   .sheet-page { animation: fadeIn 0.4s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── View Mode: read-only field display ── */
+  .field-display {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(201,150,63,0.15);
+    color: var(--parchment);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    padding: 0.5rem 0;
+    min-height: 2rem;
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .field-display.empty {
+    color: var(--parchment-dark);
+    opacity: 0.35;
+    font-style: italic;
+  }
+  /* Large modifier display in view mode */
+  .ability-modifier-display {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    color: var(--gold-pale);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+    text-align: center;
+  }
+  .ability-score-display {
+    font-family: var(--font-heading);
+    font-size: 0.9rem;
+    color: var(--parchment-dark);
+    text-align: center;
+    opacity: 0.8;
+  }
+  /* Combat stat display */
+  .combat-stat-display {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    color: var(--parchment);
+    text-align: center;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid rgba(201,150,63,0.15);
+  }
+  /* Edit mode indicator banner */
+  .edit-mode-banner {
+    display: none;
+    background: rgba(201,150,63,0.08);
+    border: 1px solid rgba(201,150,63,0.3);
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-family: var(--font-heading);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1.25rem;
+    text-align: center;
+  }
+  .edit-mode-banner.visible { display: block; }
+
+  /* Textarea display */
+  .textarea-display {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(201,150,63,0.15);
+    color: var(--parchment);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    padding: 0.5rem 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 2rem;
+    display: block;
+  }
+  /* HP inputs stay active in view mode — highlight them */
+  .always-editable {
+    position: relative;
+  }
+  .always-editable::after {
+    content: '✎';
+    position: absolute;
+    top: 0.2rem;
+    right: 0.2rem;
+    font-size: 0.55rem;
+    color: var(--gold);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  /* Skill/save rows non-interactive in view mode */
+  body.view-mode .skill-prof { pointer-events: none; cursor: default; }
+  body.view-mode .skill-row  { cursor: default; }
+  body.view-mode .skill-row:hover { background: none; }
+  /* In view mode: lock features and spells lists only; equipment/inventory stays editable */
+  body.view-mode .features-lock .add-item-row { display: none; }
+  body.view-mode .features-lock .list-item-remove { display: none; }
+  body.view-mode .spells-lock .add-item-row { display: none; }
+  body.view-mode .spells-lock .list-item-remove { display: none; }
 </style>
 {% endblock %}
 {% block content %}
@@ -16,10 +117,16 @@
     <div class="sheet-header-actions">
       <span class="save-indicator" id="saveIndicator">✦ Saved</span>
       <span class="dm-badge" id="dmBadge" style="display:none;font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold);background:rgba(201,150,63,0.1);border:1px solid rgba(201,150,63,0.3);padding:0.4rem 0.9rem;border-radius:4px">👁 DM View — Read Only</span>
-      <button class="btn btn-primary" id="saveBtn" onclick="saveCharacter()">Save Changes</button>
+      <!-- View mode button (shown by default for existing chars) -->
+      <button class="btn btn-secondary" id="editModeBtn" onclick="enterEditMode()" style="display:none">✎ Edit Character</button>
+      <!-- Edit mode buttons -->
+      <button class="btn btn-primary" id="saveBtn" onclick="saveCharacter()" style="display:none">Save Changes</button>
+      <button class="btn btn-secondary" id="cancelEditBtn" onclick="cancelEditMode()" style="display:none">✕ Cancel</button>
       <a href="/dashboard" class="btn btn-secondary" id="backBtn">← Back</a>
     </div>
   </div>
+
+  <div class="edit-mode-banner" id="editModeBanner">✎ Edit Mode — Changes will be saved when you click Save Changes</div>
 
   <!-- TABS -->
   <div class="sheet-tabs">
@@ -33,17 +140,17 @@
 
   <!-- TAB: CORE -->
   <div class="tab-panel active" id="tab-core">
-    <!-- Identity -->
     <div class="sheet-section">
       <div class="section-title">Identity</div>
       <div class="info-grid">
         <div class="form-group">
           <label class="form-label">Character Name</label>
-          <input class="form-input" id="f-name" placeholder="Name your hero..."/>
+          <input class="form-input edit-only" id="f-name" placeholder="Name your hero..."/>
+          <div class="field-display view-only" id="d-name"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Race</label>
-          <select class="form-select" id="f-race">
+          <select class="form-select edit-only" id="f-race">
             <option value="">— Choose Race —</option>
             <option>Human</option><option>Elf</option><option>Dwarf</option>
             <option>Halfling</option><option>Gnome</option><option>Half-Elf</option>
@@ -51,10 +158,11 @@
             <option>Aasimar</option><option>Genasi</option><option>Goliath</option>
             <option>Tabaxi</option><option>Tortle</option><option>Other</option>
           </select>
+          <div class="field-display view-only" id="d-race"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Class</label>
-          <select class="form-select" id="f-class" onchange="updateClassInfo()">
+          <select class="form-select edit-only" id="f-class" onchange="updateClassInfo()">
             <option value="">— Choose Class —</option>
             <option>Artificer</option><option>Barbarian</option><option>Bard</option>
             <option>Cleric</option><option>Druid</option><option>Fighter</option>
@@ -62,14 +170,16 @@
             <option>Rogue</option><option>Sorcerer</option><option>Warlock</option>
             <option>Wizard</option>
           </select>
+          <div class="field-display view-only" id="d-class"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Subclass</label>
-          <input class="form-input" id="f-subclass" placeholder="e.g. School of Evocation"/>
+          <input class="form-input edit-only" id="f-subclass" placeholder="e.g. School of Evocation"/>
+          <div class="field-display view-only" id="d-subclass"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Background</label>
-          <select class="form-select" id="f-background">
+          <select class="form-select edit-only" id="f-background">
             <option value="">— Choose Background —</option>
             <option>Acolyte</option><option>Charlatan</option><option>Criminal</option>
             <option>Entertainer</option><option>Folk Hero</option><option>Guild Artisan</option>
@@ -77,46 +187,48 @@
             <option>Sage</option><option>Sailor</option><option>Soldier</option>
             <option>Urchin</option><option>Custom</option>
           </select>
+          <div class="field-display view-only" id="d-background"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Alignment</label>
-          <select class="form-select" id="f-alignment">
+          <select class="form-select edit-only" id="f-alignment">
             <option value="">— Choose Alignment —</option>
             <option>Lawful Good</option><option>Neutral Good</option><option>Chaotic Good</option>
             <option>Lawful Neutral</option><option>True Neutral</option><option>Chaotic Neutral</option>
             <option>Lawful Evil</option><option>Neutral Evil</option><option>Chaotic Evil</option>
           </select>
+          <div class="field-display view-only" id="d-alignment"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Level</label>
-          <input class="form-input" id="f-level" type="number" min="1" max="20" placeholder="1" onchange="updateProfBonus()"/>
+          <input class="form-input edit-only" id="f-level" type="number" min="1" max="20" placeholder="1" onchange="updateProfBonus()"/>
+          <div class="field-display view-only" id="d-level"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Experience Points</label>
-          <input class="form-input" id="f-experience" type="number" min="0" placeholder="0"/>
+          <input class="form-input edit-only" id="f-experience" type="number" min="0" placeholder="0"/>
+          <div class="field-display view-only" id="d-experience"></div>
         </div>
       </div>
     </div>
 
-    <!-- Ability Scores -->
     <div class="sheet-section">
       <div class="section-title">Ability Scores</div>
-      <div class="ability-scores" id="abilityScores">
-        <!-- rendered by JS -->
-      </div>
+      <div class="ability-scores" id="abilityScores"></div>
     </div>
 
-    <!-- Proficiencies & Languages -->
     <div class="sheet-section">
       <div class="section-title">Proficiencies & Languages</div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Proficiencies</label>
-          <textarea class="form-textarea" id="f-proficiencies" placeholder="Weapons, armor, tools you're proficient with..." rows="4"></textarea>
+          <textarea class="form-textarea edit-only" id="f-proficiencies" placeholder="Weapons, armor, tools you're proficient with..." rows="4"></textarea>
+          <div class="textarea-display view-only" id="d-proficiencies"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Languages</label>
-          <textarea class="form-textarea" id="f-languages" placeholder="Languages your character speaks..." rows="4"></textarea>
+          <textarea class="form-textarea edit-only" id="f-languages" placeholder="Languages your character speaks..." rows="4"></textarea>
+          <div class="textarea-display view-only" id="d-languages"></div>
         </div>
       </div>
     </div>
@@ -129,15 +241,18 @@
       <div class="combat-stats">
         <div class="combat-stat">
           <div class="combat-stat-label">Armor Class</div>
-          <input class="combat-stat-input" id="f-armor_class" type="number" min="0" value="10"/>
+          <input class="combat-stat-input edit-only" id="f-armor_class" type="number" min="0" value="10"/>
+          <div class="combat-stat-display view-only" id="d-armor_class">10</div>
         </div>
         <div class="combat-stat">
           <div class="combat-stat-label">Initiative</div>
-          <input class="combat-stat-input" id="f-initiative" type="number" value="0"/>
+          <input class="combat-stat-input edit-only" id="f-initiative" type="number" value="0"/>
+          <div class="combat-stat-display view-only" id="d-initiative">0</div>
         </div>
         <div class="combat-stat">
           <div class="combat-stat-label">Speed (ft)</div>
-          <input class="combat-stat-input" id="f-speed" type="number" min="0" value="30"/>
+          <input class="combat-stat-input edit-only" id="f-speed" type="number" min="0" value="30"/>
+          <div class="combat-stat-display view-only" id="d-speed">30</div>
         </div>
         <div class="combat-stat">
           <div class="combat-stat-label">Prof. Bonus</div>
@@ -155,13 +270,16 @@
       <div class="combat-stats">
         <div class="combat-stat">
           <div class="combat-stat-label">Maximum HP</div>
-          <input class="combat-stat-input" id="f-hp_max" type="number" min="0" value="10" onchange="updateHpBar()"/>
+          <!-- Max HP: editable in edit mode only -->
+          <input class="combat-stat-input edit-only" id="f-hp_max" type="number" min="0" value="10" onchange="updateHpBar()"/>
+          <div class="combat-stat-display view-only" id="d-hp_max">10</div>
         </div>
-        <div class="combat-stat">
+        <!-- Current HP and Temp HP: always editable -->
+        <div class="combat-stat always-editable">
           <div class="combat-stat-label">Current HP</div>
           <input class="combat-stat-input" id="f-hp_current" type="number" value="10" onchange="updateHpBar()"/>
         </div>
-        <div class="combat-stat">
+        <div class="combat-stat always-editable">
           <div class="combat-stat-label">Temporary HP</div>
           <input class="combat-stat-input" id="f-hp_temp" type="number" min="0" value="0"/>
         </div>
@@ -171,8 +289,7 @@
       </div>
     </div>
 
-    <!-- Features & Traits -->
-    <div class="sheet-section">
+    <div class="sheet-section features-lock">
       <div class="section-title">Features & Traits</div>
       <div class="list-container" id="featuresList"></div>
       <div class="add-item-row">
@@ -204,27 +321,31 @@
       <div class="form-row-3">
         <div class="form-group">
           <label class="form-label">Spell Save DC</label>
-          <input class="form-input" id="f-spell_save_dc" type="number" min="0" placeholder="0"/>
+          <input class="form-input edit-only" id="f-spell_save_dc" type="number" min="0" placeholder="0"/>
+          <div class="combat-stat-display view-only" id="d-spell_save_dc" style="font-size:1.1rem;text-align:left;padding:0.4rem 0"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Spell Attack Bonus</label>
-          <input class="form-input" id="f-spell_attack_bonus" type="number" placeholder="0"/>
+          <input class="form-input edit-only" id="f-spell_attack_bonus" type="number" placeholder="0"/>
+          <div class="combat-stat-display view-only" id="d-spell_attack_bonus" style="font-size:1.1rem;text-align:left;padding:0.4rem 0"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Spellcasting Ability</label>
-          <select class="form-select" id="spellcastingAbility">
+          <select class="form-select edit-only" id="spellcastingAbility">
             <option value="">—</option>
             <option>Intelligence</option><option>Wisdom</option><option>Charisma</option>
           </select>
+          <div class="field-display view-only" id="d-spellcasting_ability"></div>
         </div>
       </div>
       <div style="margin-top:1.5rem">
         <div class="section-title">Spell Slots</div>
+        <p class="view-only" style="font-size:0.8rem;color:var(--gold);opacity:0.7;font-style:italic;margin-bottom:0.75rem;font-family:var(--font-heading);letter-spacing:0.05em;">Available / Total — available slots editable during play</p>
         <div class="combat-stats" id="spellSlotsGrid"></div>
       </div>
     </div>
 
-    <div class="sheet-section">
+    <div class="sheet-section spells-lock">
       <div class="section-title">Spell List</div>
       <div class="list-container" id="spellsList"></div>
       <div class="add-item-row">
@@ -251,11 +372,26 @@
     <div class="sheet-section">
       <div class="section-title">Currency</div>
       <div class="combat-stats">
-        <div class="combat-stat"><div class="combat-stat-label">Copper</div><input class="combat-stat-input" id="currency-cp" type="number" min="0" value="0"/></div>
-        <div class="combat-stat"><div class="combat-stat-label">Silver</div><input class="combat-stat-input" id="currency-sp" type="number" min="0" value="0"/></div>
-        <div class="combat-stat"><div class="combat-stat-label">Electrum</div><input class="combat-stat-input" id="currency-ep" type="number" min="0" value="0"/></div>
-        <div class="combat-stat"><div class="combat-stat-label">Gold</div><input class="combat-stat-input" id="currency-gp" type="number" min="0" value="0"/></div>
-        <div class="combat-stat"><div class="combat-stat-label">Platinum</div><input class="combat-stat-input" id="currency-pp" type="number" min="0" value="0"/></div>
+        <div class="combat-stat">
+          <div class="combat-stat-label">Copper</div>
+          <input class="combat-stat-input" id="currency-cp" type="number" min="0" value="0"/>
+        </div>
+        <div class="combat-stat">
+          <div class="combat-stat-label">Silver</div>
+          <input class="combat-stat-input" id="currency-sp" type="number" min="0" value="0"/>
+        </div>
+        <div class="combat-stat">
+          <div class="combat-stat-label">Electrum</div>
+          <input class="combat-stat-input" id="currency-ep" type="number" min="0" value="0"/>
+        </div>
+        <div class="combat-stat">
+          <div class="combat-stat-label">Gold</div>
+          <input class="combat-stat-input" id="currency-gp" type="number" min="0" value="0"/>
+        </div>
+        <div class="combat-stat">
+          <div class="combat-stat-label">Platinum</div>
+          <input class="combat-stat-input" id="currency-pp" type="number" min="0" value="0"/>
+        </div>
       </div>
     </div>
   </div>
@@ -267,29 +403,35 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Personality Traits</label>
-          <textarea class="form-textarea" id="f-personality" rows="4" placeholder="How does your character act? What quirks do they have?"></textarea>
+          <textarea class="form-textarea edit-only" id="f-personality" rows="4" placeholder="How does your character act? What quirks do they have?"></textarea>
+          <div class="textarea-display view-only" id="d-personality"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Ideals</label>
-          <textarea class="form-textarea" id="f-ideals" rows="4" placeholder="What does your character believe in?"></textarea>
+          <textarea class="form-textarea edit-only" id="f-ideals" rows="4" placeholder="What does your character believe in?"></textarea>
+          <div class="textarea-display view-only" id="d-ideals"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Bonds</label>
-          <textarea class="form-textarea" id="f-bonds" rows="4" placeholder="Who or what does your character care about most?"></textarea>
+          <textarea class="form-textarea edit-only" id="f-bonds" rows="4" placeholder="Who or what does your character care about most?"></textarea>
+          <div class="textarea-display view-only" id="d-bonds"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Flaws</label>
-          <textarea class="form-textarea" id="f-flaws" rows="4" placeholder="What weaknesses or vices does your character have?"></textarea>
+          <textarea class="form-textarea edit-only" id="f-flaws" rows="4" placeholder="What weaknesses or vices does your character have?"></textarea>
+          <div class="textarea-display view-only" id="d-flaws"></div>
         </div>
       </div>
     </div>
     <div class="sheet-section">
       <div class="section-title">Backstory</div>
-      <textarea class="form-textarea" id="f-backstory" rows="8" placeholder="Tell the tale of your hero's origins..."></textarea>
+      <textarea class="form-textarea edit-only" id="f-backstory" rows="8" placeholder="Tell the tale of your hero's origins..."></textarea>
+      <div class="textarea-display view-only" id="d-backstory"></div>
     </div>
     <div class="sheet-section">
       <div class="section-title">Notes</div>
-      <textarea class="form-textarea" id="f-notes" rows="6" placeholder="Campaign notes, quest hooks, important NPCs..."></textarea>
+      <textarea class="form-textarea edit-only" id="f-notes" rows="6" placeholder="Campaign notes, quest hooks, important NPCs..."></textarea>
+      <div class="textarea-display view-only" id="d-notes"></div>
     </div>
   </div>
 </div>
@@ -299,6 +441,9 @@
 <script>
 const MODE = "{{ mode }}";
 const CHAR_ID = "{{ char_id if char_id else '' }}";
+
+// isEditMode: true when in full edit mode OR when creating a new character
+let isEditMode = (MODE === 'new');
 
 const ABILITIES = [
   { key: 'str_score', label: 'STR', name: 'Strength' },
@@ -324,12 +469,117 @@ const SKILLS_DEF = [
 const SAVES_DEF = ABILITIES.map(a => ({ name: a.name, ability: a.label.toLowerCase() }));
 
 let charData = {};
-let skills = {}; // { "Perception": true, ... }
+let skills = {};
 let savingThrows = {};
 let features = [];
 let equipment = [];
 let spells = [];
 let spellSlots = {};
+
+// ─── View / Edit Mode ─────────────────────────────
+
+function applyViewEditModeToSlots() {
+  // Slot totals: editable only in edit mode
+  document.querySelectorAll('.slot-total-input').forEach(el => {
+    el.style.display = isEditMode ? '' : 'none';
+  });
+  document.querySelectorAll('.slot-total-display').forEach(el => {
+    el.style.display = isEditMode ? 'none' : '';
+  });
+}
+
+function applyViewEditMode() {
+  const editEls  = document.querySelectorAll('.edit-only');
+  const viewEls  = document.querySelectorAll('.view-only');
+  const saveBtn  = document.getElementById('saveBtn');
+  const editBtn  = document.getElementById('editModeBtn');
+  const cancelBtn= document.getElementById('cancelEditBtn');
+  const banner   = document.getElementById('editModeBanner');
+
+  if (isEditMode) {
+    document.body.classList.remove('view-mode');
+    editEls.forEach(el => { el.style.display = ''; });
+    viewEls.forEach(el => { el.style.display = 'none'; });
+    if (MODE !== 'new') {
+      saveBtn.style.display = '';
+      cancelBtn.style.display = '';
+      editBtn.style.display = 'none';
+      banner.classList.add('visible');
+    } else {
+      saveBtn.style.display = '';
+      cancelBtn.style.display = 'none';
+      editBtn.style.display = 'none';
+      banner.classList.remove('visible');
+    }
+  } else {
+    document.body.classList.add('view-mode');
+    editEls.forEach(el => { el.style.display = 'none'; });
+    viewEls.forEach(el => { el.style.display = ''; });
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    editBtn.style.display = '';
+    banner.classList.remove('visible');
+  }
+  applyViewEditModeToSlots();
+}
+
+function enterEditMode() {
+  isEditMode = true;
+  applyViewEditMode();
+}
+
+function cancelEditMode() {
+  isEditMode = false;
+  // Re-populate display fields from current form values
+  updateDisplayFields();
+  applyViewEditMode();
+}
+
+// Populate all the view-only display divs from the form inputs
+function updateDisplayFields() {
+  const textFields = ['name','subclass','proficiencies','languages',
+    'personality','ideals','bonds','flaws','backstory','notes'];
+  textFields.forEach(f => {
+    const input = document.getElementById(`f-${f}`);
+    const disp  = document.getElementById(`d-${f}`);
+    if (input && disp) {
+      const val = input.value || '';
+      disp.textContent = val;
+      disp.classList.toggle('empty', !val);
+    }
+  });
+
+  // Selects
+  ['race','class','background','alignment'].forEach(f => {
+    const input = document.getElementById(`f-${f}`);
+    const disp  = document.getElementById(`d-${f}`);
+    if (input && disp) {
+      const val = input.value || '';
+      disp.textContent = val;
+      disp.classList.toggle('empty', !val);
+    }
+  });
+
+  // Numbers
+  ['level','experience','armor_class','initiative','speed','hp_max',
+   'spell_save_dc','spell_attack_bonus'].forEach(f => {
+    const input = document.getElementById(`f-${f}`);
+    const disp  = document.getElementById(`d-${f}`);
+    if (input && disp) {
+      disp.textContent = input.value || '0';
+    }
+  });
+
+  // Currency inputs are always visible — no display mirror needed
+
+  // Spellcasting ability
+  const saEl = document.getElementById('spellcastingAbility');
+  const saDisp = document.getElementById('d-spellcasting_ability');
+  if (saEl && saDisp) {
+    saDisp.textContent = saEl.value || '—';
+    saDisp.classList.toggle('empty', !saEl.value);
+  }
+}
 
 // ─── Build Ability Score Grid ──────────────────────
 
@@ -341,15 +591,20 @@ function buildAbilityScores() {
     const mod = getModifier(score);
     const div = document.createElement('div');
     div.className = 'ability-score';
+    // Both the editable input AND display modifier are always shown;
+    // only the score input row is toggled by edit-only/view-only
     div.innerHTML = `
       <div class="ability-name">${ab.label}</div>
       <div class="ability-modifier" id="mod-${ab.key}">${formatMod(mod)}</div>
-      <div class="ability-input-wrap">
+      <div class="ability-input-wrap edit-only">
         <input class="ability-score-input" id="${ab.key}" type="number" min="1" max="30"
           value="${score}" onchange="onAbilityChange('${ab.key}')"/>
-      </div>`;
+      </div>
+      <div class="ability-score-display view-only" id="score-display-${ab.key}">${score}</div>`;
     container.appendChild(div);
   });
+  // Apply current display state
+  applyViewEditMode();
 }
 
 function onAbilityChange(key) {
@@ -357,6 +612,8 @@ function onAbilityChange(key) {
   charData[key] = val;
   const mod = getModifier(val);
   document.getElementById(`mod-${key}`).textContent = formatMod(mod);
+  const scoreDisp = document.getElementById(`score-display-${key}`);
+  if (scoreDisp) scoreDisp.textContent = val;
   updateSkillsList();
   updateSavingThrows();
   updatePassivePerception();
@@ -399,6 +656,7 @@ function updateSkillsList() {
       <span class="skill-name">${sk.name}</span>
       <span class="skill-ability">${sk.ability.toUpperCase()}</span>`;
     row.querySelector('.skill-prof').addEventListener('click', () => {
+      if (!isEditMode) return; // lock proficiency toggles in view mode
       skills[sk.name] = !skills[sk.name];
       updateSkillsList();
       updatePassivePerception();
@@ -424,6 +682,7 @@ function updateSavingThrows() {
       <span class="skill-mod">${formatMod(total)}</span>
       <span class="skill-name">${sv.name}</span>`;
     row.querySelector('.skill-prof').addEventListener('click', () => {
+      if (!isEditMode) return;
       savingThrows[sv.name] = !savingThrows[sv.name];
       updateSavingThrows();
     });
@@ -445,6 +704,9 @@ function updateHpBar() {
   const cur = parseInt(document.getElementById('f-hp_current').value) || 0;
   const pct = Math.max(0, Math.min(100, (cur / max) * 100));
   document.getElementById('hpBarDisplay').style.width = pct + '%';
+  // keep the view-mode display in sync
+  const dispMax = document.getElementById('d-hp_max');
+  if (dispMax) dispMax.textContent = max;
 }
 
 // ─── Spell Slots Grid ─────────────────────────────
@@ -457,19 +719,24 @@ function buildSpellSlots() {
     const total = (spellSlots[lvl] || {}).total || 0;
     const cell = document.createElement('div');
     cell.className = 'combat-stat';
+    const inputStyle = 'width:36px;text-align:center;background:transparent;border:none;border-bottom:1px solid rgba(201,150,63,0.4);color:var(--parchment);font-family:var(--font-heading);font-size:1rem;outline:none;padding:0.1rem';
+    const displayStyle = 'display:inline-block;width:36px;text-align:center;font-family:var(--font-heading);font-size:1rem;color:var(--parchment);opacity:0.7;border-bottom:1px solid rgba(201,150,63,0.15);padding:0.1rem 0';
     cell.innerHTML = `
       <div class="combat-stat-label">Lvl ${lvl}</div>
       <div style="display:flex;gap:0.3rem;align-items:center;justify-content:center">
-        <input style="width:36px;text-align:center;background:transparent;border:none;border-bottom:1px solid rgba(201,150,63,0.4);color:var(--parchment);font-family:var(--font-heading);font-size:1rem;outline:none;padding:0.1rem"
-          type="number" min="0" max="9" value="${used}" title="Used"
+        <input class="slot-used-input" style="${inputStyle}"
+          type="number" min="0" max="9" value="${used}" title="Available"
           onchange="spellSlots[${lvl}] = spellSlots[${lvl}] || {}; spellSlots[${lvl}].used = parseInt(this.value)||0"/>
         <span style="color:var(--gold);opacity:0.5">/</span>
-        <input style="width:36px;text-align:center;background:transparent;border:none;border-bottom:1px solid rgba(201,150,63,0.4);color:var(--parchment);font-family:var(--font-heading);font-size:1rem;outline:none;padding:0.1rem"
+        <input class="slot-total-input edit-only" style="${inputStyle}"
           type="number" min="0" max="9" value="${total}" title="Total"
           onchange="spellSlots[${lvl}] = spellSlots[${lvl}] || {}; spellSlots[${lvl}].total = parseInt(this.value)||0"/>
+        <span class="slot-total-display view-only" style="${displayStyle}" title="Total">${total}</span>
       </div>`;
     grid.appendChild(cell);
   }
+  // Re-apply current view/edit state so the new elements respect it
+  applyViewEditModeToSlots();
 }
 
 // ─── Dynamic Lists ────────────────────────────────
@@ -528,9 +795,10 @@ function addEquipment() {
   document.getElementById('newItemQty').value = '1';
   document.getElementById('newItemDesc').value = '';
   renderEquipment();
+  scheduleQuickSave();
 }
 
-function removeEquipment(i) { equipment.splice(i, 1); renderEquipment(); }
+function removeEquipment(i) { equipment.splice(i, 1); renderEquipment(); scheduleQuickSave(); }
 
 function renderSpells() {
   const container = document.getElementById('spellsList');
@@ -575,7 +843,6 @@ function populateForm(c) {
     if (el) el.value = c[f] ?? '';
   });
 
-  // Class select
   const cls = document.getElementById('f-class');
   if (cls && c.class) cls.value = c.class;
   const race = document.getElementById('f-race');
@@ -585,7 +852,6 @@ function populateForm(c) {
   const al = document.getElementById('f-alignment');
   if (al && c.alignment) al.value = c.alignment;
 
-  // Ability scores
   ABILITIES.forEach(ab => {
     const el = document.getElementById(ab.key);
     if (el) el.value = c[ab.key] || 10;
@@ -614,6 +880,8 @@ function populateForm(c) {
   renderEquipment();
   renderSpells();
   buildSpellSlots();
+  updateDisplayFields();
+  applyViewEditMode();
 }
 
 async function loadCharacter() {
@@ -637,7 +905,6 @@ function collectFormData() {
   const get = id => document.getElementById(id)?.value ?? '';
   const getInt = id => parseInt(get(id)) || 0;
 
-  // Rebuild skills and saves from DOM
   const currentSkills = {};
   document.querySelectorAll('[data-skill]').forEach(el => {
     currentSkills[el.dataset.skill] = el.classList.contains('active');
@@ -698,11 +965,14 @@ async function saveCharacter() {
         name: data.name, race: data.race, char_class: data.char_class,
         background: data.background, alignment: data.alignment
       });
-      // Then update with full data
       await api('PUT', `/api/characters/${result.id}`, data);
       window.location.href = `/character/${result.id}`;
     } else {
       await api('PUT', `/api/characters/${CHAR_ID}`, data);
+      // Exit edit mode after saving
+      isEditMode = false;
+      updateDisplayFields();
+      applyViewEditMode();
       const indicator = document.getElementById('saveIndicator');
       indicator.classList.add('show');
       setTimeout(() => indicator.classList.remove('show'), 2500);
@@ -717,9 +987,30 @@ async function saveCharacter() {
   }
 }
 
+// Quick-save for HP and spell slots (always available in view mode)
+async function quickSave() {
+  if (MODE === 'new' || isEditMode) return; // full save handles it in edit mode
+  try {
+    const get = id => document.getElementById(id)?.value ?? '';
+    const getInt = id => parseInt(get(id)) || 0;
+    await api('PUT', `/api/characters/${CHAR_ID}`, {
+      hp_current:  getInt('f-hp_current'),
+      hp_temp:     getInt('f-hp_temp'),
+      spell_slots: spellSlots,
+      equipment:   equipment,
+      // currency fields are always-editable inputs
+      // (no char_class here — just session-relevant fields)
+    });
+    const indicator = document.getElementById('saveIndicator');
+    indicator.classList.add('show');
+    setTimeout(() => indicator.classList.remove('show'), 2000);
+  } catch (e) {
+    showToast('Auto-save failed: ' + e.message);
+  }
+}
+
 function updateClassInfo() {
   const cls = document.getElementById('f-class').value;
-  const name = document.getElementById('f-name').value;
   const race = document.getElementById('f-race').value;
   const level = document.getElementById('f-level').value;
   document.getElementById('sheetSubtitle').textContent =
@@ -730,14 +1021,45 @@ function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Auto-save on Ctrl+S
+// Auto-save HP/slots changes in view mode with a short debounce
+let quickSaveTimer = null;
+function scheduleQuickSave() {
+  if (isEditMode || MODE === 'new') return;
+  clearTimeout(quickSaveTimer);
+  quickSaveTimer = setTimeout(quickSave, 1500);
+}
+
+// Attach quick-save listeners to session-editable fields
+document.addEventListener('DOMContentLoaded', () => {
+  ['f-hp_current','f-hp_temp'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', scheduleQuickSave);
+  });
+
+  // Spell slot inputs are built dynamically; delegate from the grid
+  document.getElementById('spellSlotsGrid')?.addEventListener('change', scheduleQuickSave);
+
+  // Currency inputs — always editable, quick-save on change
+  ['currency-cp','currency-sp','currency-ep','currency-gp','currency-pp'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', scheduleQuickSave);
+  });
+
+  // Equipment list changes (add/remove) trigger quick-save via renderEquipment
+});
+
+// Ctrl+S — saves everything in edit mode, or quick-saves in view mode
 document.addEventListener('keydown', e => {
-  if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveCharacter(); }
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault();
+    if (isEditMode || MODE === 'new') {
+      saveCharacter();
+    } else {
+      quickSave();
+    }
+  }
 });
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCharacter();
-  // Activate first tab
   document.querySelector('.sheet-tab')?.classList.add('active');
   document.getElementById('tab-core')?.classList.add('active');
 });
